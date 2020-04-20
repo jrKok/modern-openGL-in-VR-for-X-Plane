@@ -125,14 +125,16 @@ void OpenGLInit(){
    glewInit();
 
  //shader sources
-    const char *vertexShaderSource = "#version 330 core\n"
+    const char *vertexShaderSource =
+        "#version 330 core\n"
         "layout (location = 0) in vec2 aPos;\n"
         "void main()\n"
         "{\n"
         "   gl_Position = vec4(aPos.x, aPos.y, 0.0f, 1.0f);\n"
         "}\0";
 
-    const char *fragmentShaderSource = "#version 330 core\n"
+    const char *fragmentShaderSource =
+        "#version 330 core\n"
         "out vec4 FragColor;\n"
         "void main()\n"
         "{\n"
@@ -255,14 +257,7 @@ void checkCompileErrors(unsigned int shader, string type)
 }
 
 void draw(XPLMWindowID, void *){
-    XPLMSetGraphicsState(
-        0,   // No fog, equivalent to glDisable(GL_FOG);
-        0,   // One texture, equivalent to glEnable(GL_TEXTURE_2D);
-        0,   // No lighting, equivalent to glDisable(GL_LIGHT0);
-        0,   // No alpha testing, e.g glDisable(GL_ALPHA_TEST);
-        1,   // Use alpha blending, e.g. glEnable(GL_BLEND);
-        1,   // Depth read
-        0);  // No depth write, e.g. glDepthMask(GL_FALSE);
+
     int wW(0),wH(0),screenL(0),screenR(0),screenT(0),screenB(0);
      XPLMGetWindowGeometry(g_window,&screenL,&screenT,&screenR,&screenB);
 
