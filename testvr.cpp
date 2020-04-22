@@ -127,11 +127,12 @@ void OpenGLInit(){
  //shader sources
     const char *vertexShaderSource =
         "#version 330 core\n"
-        "layout (location = 0) in vec2 aPos;\n"
+        "layout (location = 0) in vec2 vCoordA;\n"
         "void main()\n"
         "{\n"
-        "   gl_Position = vec4(aPos.x, aPos.y, 0.0f, 1.0f);\n"
+        "   gl_Position = vec4(vCoordA.x, vCoordA.y, 0.0f, 1.0f);\n"
         "}\0";
+  //vCoordA for vertex coordinate attribute
 
     const char *fragmentShaderSource =
         "#version 330 core\n"
@@ -210,24 +211,25 @@ void MakeVBO(){
 
 void ComputeVertices(){
     if (XPLMWindowIsInVR(g_window)){
-            int margin(12);
-            int upperMargin(40);
-            float wRatio=1.0f-float(2*margin)/float(2*margin+windowWidth);
-            float huRatio=1.0f-float(2*upperMargin)/float(windowHeight+margin+upperMargin);
-            float hlRatio=-1.0f+float(2*margin)/float(windowHeight+margin+upperMargin);
-            WriteDebug("next hlRatio huRatio wRatio is "+std::to_string(hlRatio)+" "+std::to_string(huRatio)+" "+std::to_string(wRatio));
+            float margin(12.0f);
+            float upperMargin(40.0f);
+            float totalWindowWidth=float(margin+windowWidth+margin);
+            float totalWindowHeight=float(upperMargin+windowHeight+margin);
+            float horizontalRatio=2*margin/totalWindowWidth;
+            float upperVerticalRatio=2*upperMargin/totalWindowHeight;
+            float lowerVerticalRatio=2*margin/totalWindowHeight;
 
-            vertices[0]=wRatio;vertices[1]=huRatio;  // right top
-            vertices[2]=wRatio;vertices[3]=hlRatio; // right bottom
-            vertices[4]=-wRatio;vertices[5]=hlRatio;// left bottom
-            vertices[6]=-wRatio;vertices[7]=huRatio; // left top
+            vertices[0]= 1-horizontalRatio;vertices[1]= 1-upperVerticalRatio;  // right top
+            vertices[2]= 1-horizontalRatio;vertices[3]=-1+lowerVerticalRatio; // right bottom
+            vertices[4]=-1+horizontalRatio;vertices[5]=-1+lowerVerticalRatio;// left bottom
+            vertices[6]=-1+horizontalRatio;vertices[7]= 1-upperVerticalRatio; // left top
        }
             else{
             vertices[0]=1;vertices[1]=1;  // right top
             vertices[2]=1;vertices[3]=-1; // right bottom
             vertices[4]=-1;vertices[5]=-1;// left bottom
             vertices[6]=-1;vertices[7]=1; // left top
-}
+       }
 
 }
 
@@ -242,7 +244,7 @@ void checkCompileErrors(unsigned int shader, string type)
         {
             glGetShaderInfoLog(shader, 1024, nullptr, infoLog);
             string ilog=infoLog;
-            WriteDebug("ERROR::SHADER_COMPILATION_ERROR of type: "+ilog+" "+type+" "+std::to_string(success));        }
+            WriteDebug("SHADER COMPILATION ERROR of type: "+ilog+" "+type);        }
     }
     else
     {
@@ -251,7 +253,7 @@ void checkCompileErrors(unsigned int shader, string type)
         {
             glGetProgramInfoLog(shader, 1024, nullptr, infoLog);
             string ilog=infoLog;
-            WriteDebug("ERROR::PROGRAM_LINKING_ERROR of type: "+ilog+" "+ type+" "+std::to_string(success));
+            WriteDebug("PROGRAM LINKING ERROR of type: "+ilog+" "+ type);
         }
     }
 }
@@ -293,6 +295,10 @@ void draw(XPLMWindowID, void *){
         int wth,hth;
         XPLMGetScreenSize(&wth,&hth);
         if (!XPLMWindowIsInVR(g_window)) glViewport(0,0,wth,hth);
+        glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER,0);
+        glUseProgram(0);
+        glEnableClientState(GL_VERTEX_ARRAY);
         float color[]={0.15f,0.1f,0.9f};
         XPLMDrawString(color,screenL+100,screenT-50,(char*)(mouseButton.c_str()),nullptr,xplmFont_Proportional);
 }
