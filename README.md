@@ -10,3 +10,5 @@ When compiled and run it shows an amber rectangle with a text showing the state 
 In 2D the Viewport can be set with the left/bottom coordinates returned by X Plane and the width and height of the custom window computed with (right-left) and (top-bottom) respectively.
 
 This code can be easily adapted to render a texture or drawing a set of primitives on the viewport. It doesn't alter XPLMDrawString in either case (2D or VR).  
+
+Developped in Qt, under the LGPL licence(https://www.gnu.org/licenses/lgpl-3.0.en.html), no Qt libraries are used.
