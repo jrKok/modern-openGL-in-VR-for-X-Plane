@@ -5,7 +5,9 @@ To compile successfully, Glew has to be added. I've done it by adding glew.h and
 
 This code has been built with the Qt IDE and the make file is processed through QMake.The compiler was MSVC2017.
 
-When compiled and run it shows an amber rectangle with a text showing the state of the left mouse button in a custom decorated window. This is to show how the codeis able to track the dimensions of the rectangle with regard to the window's zone which is able to receive clicks. In VR the viewport must not be set (while in 2D it must be defined with glViewport) but the viewport covers the whole of the VR window when it is decorated as xplm_WindowDecorationRoundRectangle. In all other cases the vertices can extend normally between -1 and 1 to receive clicks and the VBO doesn't need to be modified. 
+When compiled and run it shows an green rectangle with dark gray background with a text showing the state of the left mouse button in a custom decorated window and the rendering method (direct or modern openGL). 
+
+In VR the viewport must not be set (while in 2D it can be defined with glViewport) but the viewport covers the whole of the VR window when it is decorated as xplm_WindowDecorationRoundRectangle. In all other cases the vertices can extend normally between -1 and 1 to receive clicks and the VBO doesn't need to be modified. 
 
 In 2D the Viewport can be set with the left/bottom coordinates returned by X Plane and the width and height of the custom window computed with (right-left) and (top-bottom) respectively.
 
