@@ -13,6 +13,8 @@ In 2D the Viewport can be set with the left/bottom coordinates returned by X Pla
 
 This code can be easily adapted to render a texture or drawing a set of primitives on the viewport. It doesn't alter XPLMDrawString in either case (2D or VR).  
 
-*** Disclaimers
+*** Disclaimers and Credits :
 
-Developed in the Qt IDE, under the LGPL licence(https://www.gnu.org/licenses/lgpl-3.0.en.html), no Qt libraries are used.
+1) This Code was developed in the Qt IDE, under the LGPL licence(https://www.gnu.org/licenses/lgpl-3.0.en.html), no Qt libraries are used. Hence the code presented here falls under the same licence. 
+2) openGL implementation is done with the help of The OpenGL Extension Wrangler Library (GLEW Library), authoring and licensing information : https://github.com/nigels-com/glew#authors
+
