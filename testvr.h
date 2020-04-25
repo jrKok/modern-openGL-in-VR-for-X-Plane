@@ -8,6 +8,7 @@
 #include <XPLMProcessing.h>
 #include <string>
 #include <glew.h>
+#include <vector>
 #define GLEW_BUILD
 
 #ifndef XPLM301
@@ -16,6 +17,15 @@
 
 using std::string;
 
+struct vertex{
+    int vx,vy;
+    float red,green,blue;
+};
 
+struct rectangleData{
+    unsigned long long number;
+    int left,bottom,width,height;
+    float red, green, blue;
+};
 
 #endif

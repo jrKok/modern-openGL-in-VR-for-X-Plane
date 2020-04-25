@@ -1,26 +1,43 @@
 #include "testvr.h"
 
+
+
+void   WriteDebug         (string message);
+void   Draw               (XPLMWindowID in_window_id, void * in_refcon);
+void   DrawDirect         ();
+int	   Handle_mouse       (XPLMWindowID in_window_id, int x, int y, int is_down, void * in_refcon);
+void   OpenGLInit         ();
+void   CheckCompileErrors (unsigned int shader, string type); //this function wont be used for release, only for debugging
+void   MakeRectangle      (unsigned long long number, int x, int y, int width, int height, const float color[3]);
+vertex MakeVertex         (int x,int y, const float color[3]);
+void   MakeVBO            ();
+float  VertexXToNDCFloat  (int in_x);
+float  VertexYToNDCFloat  (int in_y);
+
+
+int					Dummy_mouse_handler(XPLMWindowID, int, int, int, void*) { return 0; }
+XPLMCursorStatus	Dummy_cursor_status_handler(XPLMWindowID, int , int , void * ) { return xplm_CursorDefault; }
+int					Dummy_wheel_handler(XPLMWindowID, int, int, int, int, void * ) { return 0; }
+void				Dummy_key_handler(XPLMWindowID, char, XPLMKeyFlags, char, void *,int ) { }
+
+const float margin        = 12.0f;
+const float upperMargin   = 40.0f;
+const float margin2D      = 0.0f;
+const float upperMargin2D = 0.0f;
 static XPLMWindowID	g_window;
 
-void                WriteDebug(string message);
-void				draw(XPLMWindowID in_window_id, void * in_refcon);
-int					handle_mouse(XPLMWindowID in_window_id, int x, int y, int is_down, void * in_refcon);
-
-int					dummy_mouse_handler(XPLMWindowID in_window_id, int x, int y, int is_down, void * in_refcon) { return 0; }
-XPLMCursorStatus	dummy_cursor_status_handler(XPLMWindowID in_window_id, int x, int y, void * in_refcon) { return xplm_CursorDefault; }
-int					dummy_wheel_handler(XPLMWindowID in_window_id, int x, int y, int wheel, int clicks, void * in_refcon) { return 0; }
-void				dummy_key_handler(XPLMWindowID in_window_id, char key, XPLMKeyFlags flags, char virtual_key, void * in_refcon, int losing_focus) { }
-float               myFlightLoop(float lastCall, float lastFL, int counter, void* refcon);
-void                OpenGLInit();
-void                checkCompileErrors(unsigned int shader, string type);
-void                MakeVBO();
-void                ComputeVertices();
-
-static XPLMDataRef g_vr_dref;
-static bool g_in_vr = false;
-static int windowWidth(0),windowHeight(0);
-static string mouseButton("");
-static float vertices[8];
+static bool directRendering (false);
+static bool firstPass(true);
+static XPLMDataRef g_in_vrDref;
+static int windowWidth(0),windowHeight(0);//will be computed later and updated after each resize
+static float totalWidth(0),totalHeight(0);//idem
+static string mouseButton("Up"),renderType("modern OGL");
+static std::vector<rectangleData> rectangles;//a std::map here would be even better !
+static std::vector<float> vertices;//for applications which build on this, this can be enhanced with structs
+static std::vector<vertex> ivertices;//holds all attributes for a vertex aimed at direct rendering (useless if only modern rendering)
+static float  bck[3]={0.15f,0.15f,0.20f};
+static float  green[3]={0.1f,0.90f,0.2f};
+static float  cyan[]={0.15f,0.9f,0.9f};
 static unsigned int shaderProgram;
 static unsigned int VAO;
 static unsigned int VBO;
@@ -54,12 +71,9 @@ PLUGIN_API int XPluginStart(
     strcpy(outName, "VRSamplePlugin");
     strcpy(outSig, "xpsdk.examples.vrsampleplugin");
     strcpy(outDesc, "A test plug-in for showcasing using modern openGL");
-    XPLMDebugString("Begin testVR Plugin");
 
-    g_vr_dref = XPLMFindDataRef("sim/graphics/VR/enabled");
-
-    mouseButton="Up";
-    return g_vr_dref != nullptr;
+    g_in_vrDref    = XPLMFindDataRef("sim/graphics/VR/enabled");
+    return 1;
 
 }
 
@@ -80,8 +94,8 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID, int msg, void *)
 
     if(!g_window && msg == XPLM_MSG_SCENERY_LOADED)
     {
-
-
+        bool g_in_vr(true);
+        g_in_vr=XPLMGetDatai(g_in_vrDref);
         int global_desktop_bounds[4]; // left, bottom, right, top
         XPLMGetScreenBoundsGlobal(&global_desktop_bounds[0], &global_desktop_bounds[3], &global_desktop_bounds[2], &global_desktop_bounds[1]);
         int left=global_desktop_bounds[0] + 50;
@@ -98,21 +112,19 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID, int msg, void *)
         params.right = right;
         params.top = top;
         params.visible = 1;
-        params.drawWindowFunc = draw;
-        params.handleMouseClickFunc = handle_mouse;
-        params.handleRightClickFunc = dummy_mouse_handler;
-        params.handleMouseWheelFunc = dummy_wheel_handler;
-        params.handleKeyFunc = dummy_key_handler;
-        params.handleCursorFunc = dummy_cursor_status_handler;
+        params.drawWindowFunc = Draw;
+        params.handleMouseClickFunc = Handle_mouse;
+        params.handleRightClickFunc = Dummy_mouse_handler;
+        params.handleMouseWheelFunc = Dummy_wheel_handler;
+        params.handleKeyFunc = Dummy_key_handler;
+        params.handleCursorFunc = Dummy_cursor_status_handler;
         params.refcon = nullptr;
         params.layer = xplm_WindowLayerFloatingWindows;
         params.decorateAsFloatingWindow = xplm_WindowDecorationRoundRectangle;
 
         g_window = XPLMCreateWindowEx(&params);
 
-        const int vr_is_enabled = XPLMGetDatai(g_vr_dref);
-        XPLMSetWindowPositioningMode(g_window, vr_is_enabled ? xplm_WindowVR : xplm_WindowPositionFree, -1);
-        g_in_vr = vr_is_enabled;
+        XPLMSetWindowPositioningMode(g_window, g_in_vr ? xplm_WindowVR : xplm_WindowPositionFree, -1);
 
         XPLMSetWindowResizingLimits(g_window, windowWidth-50, windowHeight-100, windowWidth+200, windowHeight+200);
         XPLMSetWindowTitle(g_window, "VR Window in modern openGL");
@@ -124,54 +136,59 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID, int msg, void *)
 void OpenGLInit(){
    glewInit();
 
- //shader sources
+ //shaders
     const char *vertexShaderSource =
         "#version 330 core\n"
         "layout (location = 0) in vec2 vCoordA;\n"
+        "layout (location = 1) in vec3 inColor;\n"
+        "out vec3 vColor;\n"
         "void main()\n"
         "{\n"
-        "   gl_Position = vec4(vCoordA.x, vCoordA.y, 0.0f, 1.0f);\n"
+        "   gl_Position = vec4(vCoordA, 0.0f,1.0f);\n"
+        "   vColor = inColor;\n"
         "}\0";
-  //vCoordA for vertex coordinate attribute
 
     const char *fragmentShaderSource =
         "#version 330 core\n"
         "out vec4 FragColor;\n"
+        "in  vec3 vColor;\n"
         "void main()\n"
         "{\n"
-        "   FragColor =vec4(1.0f,0.6f,0.0f,1.0f);\n"
+        "   FragColor =vec4(vColor,1.0f);\n"
         "}\n\0";
 
-    // vertex shader compile
+    // shader compilation & shader program creation, error checks are out commented
+
     unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
     glCompileShader(vertexShader);
-        checkCompileErrors(vertexShader, "VERTEX");
+        //if you modify the shaders you can uncomment the following to check for compiling errors
+        //CheckCompileErrors(vertexShader, "VERTEX");
 
-    //fragment shader compile
     unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(fragmentShader, 1, &fragmentShaderSource, nullptr);
     glCompileShader(fragmentShader);
-        checkCompileErrors(shaderProgram, "FRAGMENT");
+        //CheckCompileErrors(shaderProgram, "FRAGMENT");
 
-   // merge shaders in Program
     shaderProgram = glCreateProgram();
     glAttachShader(shaderProgram, vertexShader);
     glAttachShader(shaderProgram, fragmentShader);
     glLinkProgram(shaderProgram);
-    checkCompileErrors(shaderProgram, "PROGRAM");
+        //CheckCompileErrors(shaderProgram, "PROGRAM");
 
     glLinkProgram(shaderProgram);
 
-    WriteDebug("OpenGL Init : vertex and fragment shaders compiled");//Let us know that 2 more shaders are now on the GPU
-
- // Make space
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
 
+  // Build VAO (with VBO and EBO)
+
     unsigned int indices[] = {
-                   0, 1, 3,  // first Triangle
-                   1, 2, 3   // second Triangle
+        0,1,3,
+        1,2,3,
+        4,5,7,
+        5,6,7
+
      };
 
     glGenVertexArrays(1, &VAO);
@@ -180,60 +197,109 @@ void OpenGLInit(){
 
     glBindVertexArray(VAO);
 
-    ComputeVertices();
+    MakeVBO(); //Not really, here for the first pass, only build vertices
+
+    firstPass=false;
 
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), &vertices,GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size()*sizeof(float), vertices.data(),GL_STATIC_DRAW);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), static_cast<void*>(nullptr));
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5*sizeof (float), static_cast<void*>(nullptr));
     glEnableVertexAttribArray(0);
 
-    //hopefully this it not needed but don't want anybody to mess with my VAO
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5*sizeof (float),reinterpret_cast<void*>(2*sizeof (float)));
+    glEnableVertexAttribArray(1);
+
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
-
 }
 
 void MakeVBO(){
 
-    ComputeVertices();
+    if (XPLMWindowIsInVR(g_window)){
+       totalWidth=2*margin+windowWidth;
+       totalHeight=margin+upperMargin+windowHeight;
+    }
+    else {
+        totalWidth=2*margin2D+windowWidth;
+        totalHeight=margin2D+upperMargin2D+windowHeight;
+        WriteDebug("2D margins");
+    }
+    ivertices.clear();
+    rectangles.clear();
+    MakeRectangle(0,0,0,windowWidth,windowHeight,bck);//the "background rectangle"
+    MakeRectangle(1,30,windowHeight/2,90,20,green);//the "button" rectangle;
+
+    for (auto vt:ivertices)
+    {
+        vertices.push_back(VertexXToNDCFloat(vt.vx));
+        vertices.push_back(VertexYToNDCFloat(vt.vy));
+        vertices.push_back(vt.red  );
+        vertices.push_back(vt.green);
+        vertices.push_back(vt.blue );
+    }
+
+    if (firstPass) return;
 
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferSubData(GL_ARRAY_BUFFER,0, sizeof(vertices), &vertices);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), static_cast<void*>(nullptr));
+    glBufferSubData(GL_ARRAY_BUFFER,0, vertices.size()*sizeof (float), vertices.data());
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5*sizeof (float), static_cast<void*>(nullptr));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5*sizeof (float), reinterpret_cast<void*>(2*sizeof (float)));
 
 
 }
 
-void ComputeVertices(){
-    if (XPLMWindowIsInVR(g_window)){
-            float margin(12.0f);
-            float upperMargin(40.0f);
-            float totalWindowWidth=float(margin+windowWidth+margin);
-            float totalWindowHeight=float(upperMargin+windowHeight+margin);
-            float horizontalRatio=2*margin/totalWindowWidth;
-            float upperVerticalRatio=2*upperMargin/totalWindowHeight;
-            float lowerVerticalRatio=2*margin/totalWindowHeight;
+void MakeRectangle(unsigned long long number, int x, int y, int width, int height, const float color[3]){
 
-            vertices[0]= 1-horizontalRatio;vertices[1]= 1-upperVerticalRatio;  // right top
-            vertices[2]= 1-horizontalRatio;vertices[3]=-1+lowerVerticalRatio; // right bottom
-            vertices[4]=-1+horizontalRatio;vertices[5]=-1+lowerVerticalRatio;// left bottom
-            vertices[6]=-1+horizontalRatio;vertices[7]= 1-upperVerticalRatio; // left top
-       }
-            else{
-            vertices[0]=1;vertices[1]=1;  // right top
-            vertices[2]=1;vertices[3]=-1; // right bottom
-            vertices[4]=-1;vertices[5]=-1;// left bottom
-            vertices[6]=-1;vertices[7]=1; // left top
-       }
+    rectangleData rect;
+    rect.number=number;
+    rect.left=x;
+    rect.bottom=y;
+    rect.width=width;
+    rect.height=height;
+    rect.red=color[0];
+    rect.green=color[1];
+    rect.blue=color[2];
+    rectangles.push_back(rect);
 
+    vertex rightTop   =MakeVertex(x+width,y+height,color);
+    vertex rightBottom=MakeVertex(x+width,y,color);
+    vertex leftBottom =MakeVertex(x,y,color);
+    vertex leftTop    =MakeVertex(x,y+height,color);
+
+    ivertices.push_back(rightTop); //0 and 4
+    ivertices.push_back(rightBottom);//1 and 5
+    ivertices.push_back(leftBottom);//2 and 6
+    ivertices.push_back(leftTop);//3 and 7
 }
 
-void checkCompileErrors(unsigned int shader, string type)
+vertex MakeVertex (int x, int y, const float color[]){
+    vertex point;
+    point.vx=x;
+    point.vy=y;
+    point.red=  color[0];
+    point.green=color[1];
+    point.blue= color[2];
+    return point;
+}
+
+float VertexXToNDCFloat(int in_x){
+    float corr=(XPLMWindowIsInVR(g_window)?margin:margin2D);
+    float xf=-1+2*(in_x+corr)/totalWidth;
+    return xf;
+}
+
+float VertexYToNDCFloat(int in_y){
+    float corr=(XPLMWindowIsInVR(g_window)?margin:margin2D);
+    float yf=-1+2*(in_y+corr)/totalHeight;
+    return yf;
+}
+
+void CheckCompileErrors(unsigned int shader, string type)
 {
     int success;
     char infoLog[1024];
@@ -258,52 +324,107 @@ void checkCompileErrors(unsigned int shader, string type)
     }
 }
 
-void draw(XPLMWindowID, void *){
-
+void Draw(XPLMWindowID, void *){
+    if (directRendering){
+        DrawDirect();
+        return;
+    }
     int wW(0),wH(0),screenL(0),screenR(0),screenT(0),screenB(0);
      XPLMGetWindowGeometry(g_window,&screenL,&screenT,&screenR,&screenB);
 
         if (XPLMWindowIsInVR(g_window)){
             XPLMGetWindowGeometryVR(g_window,&wW,&wH);
+            //Detect window's resizing in VR
             if (wW!=windowWidth||wH!=windowHeight){
                 windowWidth=wW;
                 windowHeight=wH;
                 MakeVBO();
             }
         }
-        else {       
+        else {
            wW=screenR-screenL;
            wH=screenT-screenB;
+           //Detect window's resizing in 2D
+           if (wW!=windowWidth||wH!=windowHeight){
+               windowWidth=wW;
+               windowHeight=wH;
+           MakeVBO();
+           }
+           glPushAttrib(GL_VIEWPORT_BIT);
            glViewport(screenL,screenB,wW,wH);
         }
-
-
-        glUseProgram(shaderProgram);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-        glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
-        glBindVertexArray(0);
         XPLMSetGraphicsState(
             0,   // No fog, equivalent to glDisable(GL_FOG);
-            0,   // One texture, equivalent to glEnable(GL_TEXTURE_2D);
+            0,   // No texture
             0,   // No lighting, equivalent to glDisable(GL_LIGHT0);
             0,   // No alpha testing, e.g glDisable(GL_ALPHA_TEST);
             1,   // Use alpha blending, e.g. glEnable(GL_BLEND);
             1,   // No depth read, e.g. glDisable(GL_DEPTH_TEST);
             0);
-        int wth,hth;
-        XPLMGetScreenSize(&wth,&hth);
-        if (!XPLMWindowIsInVR(g_window)) glViewport(0,0,wth,hth);
+
+        glUseProgram(shaderProgram);
+        glBindVertexArray(VAO);
+        //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,EBO);
+        glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, nullptr);
         glBindVertexArray(0);
-        glBindBuffer(GL_ARRAY_BUFFER,0);
         glUseProgram(0);
-        glEnableClientState(GL_VERTEX_ARRAY);
-        float color[]={0.15f,0.1f,0.9f};
-        XPLMDrawString(color,screenL+100,screenT-50,(char*)(mouseButton.c_str()),nullptr,xplmFont_Proportional);
+        if (!XPLMWindowIsInVR(g_window)) glPopAttrib();
+
+        XPLMDrawString(bck,rectangles[1].left+screenL,rectangles[1].bottom+screenB+4,(char*)("modern/direct"),nullptr,xplmFont_Proportional);
+        XPLMDrawString(cyan,rectangles[1].left+screenL,rectangles[1].bottom+screenB-70,(char*)(mouseButton.c_str()),nullptr,xplmFont_Proportional);
+        XPLMDrawString(cyan,rectangles[1].left+screenL,rectangles[1].bottom+screenB+50,(char*)(renderType.c_str()),nullptr,xplmFont_Proportional);
 }
 
-int	handle_mouse(XPLMWindowID in_window_id, int, int, XPLMMouseStatus mouse_status, void * )
+void DrawDirect(){
+
+    int wW(0),wH(0),screenL(0),screenR(0),screenT(0),screenB(0);//wW for window width, wH for window Height
+     XPLMGetWindowGeometry(g_window,&screenL,&screenT,&screenR,&screenB);
+
+        if (XPLMWindowIsInVR(g_window)){
+            XPLMGetWindowGeometryVR(g_window,&wW,&wH);
+            //Detect window's resizing in VR
+            if (wW!=windowWidth||wH!=windowHeight){
+                windowWidth=wW;
+                windowHeight=wH;
+                MakeVBO();
+            }
+        }
+        else {
+           wW=screenR-screenL;
+           wH=screenT-screenB;
+           //Detect window's resizing in 2D
+           if (wW!=windowWidth||wH!=windowHeight){
+               windowWidth=wW;
+               windowHeight=wH;
+           MakeVBO();
+           }
+        }
+
+        XPLMSetGraphicsState(
+            0,   // No fog, equivalent to glDisable(GL_FOG);
+            0,   // No texture
+            0,   // No lighting, equivalent to glDisable(GL_LIGHT0);
+            0,   // No alpha testing, e.g glDisable(GL_ALPHA_TEST);
+            1,   // Use alpha blending, e.g. glEnable(GL_BLEND);
+            1,   // No depth read, e.g. glDisable(GL_DEPTH_TEST);
+            0);
+
+        for (auto rect:rectangles){
+            glColor3f(rect.red,rect.green,rect.blue);
+            glBegin(GL_QUADS);
+            for (unsigned long long vtx(rect.number*4),count(0) ; count<4 ; vtx++,count++){
+                glVertex2i(ivertices[vtx].vx+screenL,ivertices[vtx].vy+screenB);
+            }
+            glEnd();
+        }
+
+        XPLMDrawString(bck,rectangles[1].left+screenL,rectangles[1].bottom+screenB+4,(char*)("modern/direct"),nullptr,xplmFont_Proportional);
+        XPLMDrawString(cyan,rectangles[1].left+screenL,rectangles[1].bottom+screenB-70,(char*)(mouseButton.c_str()),nullptr,xplmFont_Proportional);
+        XPLMDrawString(cyan,rectangles[1].left+screenL,rectangles[1].bottom+screenB+50,(char*)(renderType.c_str()),nullptr,xplmFont_Proportional);
+
+}
+
+int	Handle_mouse(XPLMWindowID in_window_id, int in_x, int in_y, XPLMMouseStatus mouse_status, void * )
 {
     if(mouse_status == xplm_MouseDown)
 
@@ -315,17 +436,33 @@ int	handle_mouse(XPLMWindowID in_window_id, int, int, XPLMMouseStatus mouse_stat
         }
         else
         {
-            int wW(0),wH(0),screenL(0),screenR(0),screenT(0),screenB(0);
-            XPLMGetWindowGeometryVR(g_window,&wW,&wH);
-            XPLMGetWindowGeometry(g_window,&screenL,&screenT,&screenR,&screenB);
+           int wtop(0),wbot(0),wrght(0),wlft(0),x(in_x),y(in_y);
+           XPLMGetWindowGeometry(g_window,&wlft,&wtop,&wrght,&wbot);
+           if (!XPLMWindowIsInVR(g_window)){//in 2D click coordinates are relative to viewport
+               x=in_x-wlft-margin2D;
+               y=in_y-wbot-margin2D;
+           }
+           else{
+               x=in_x-wlft;
+               y=in_y-wbot;
+           }
+           bool buttonIsClicked=(
+                       (x>=ivertices[6].vx)&&
+                       (x<=ivertices[4].vx)&&
+                       (y>=ivertices[6].vy)&&
+                       (y<=ivertices[4].vy));
+           if (buttonIsClicked){
+            directRendering=!directRendering;
+            renderType=(directRendering?"Direct Rendering":"modern openGL");
+           }
 
-            mouseButton="Click";
+            mouseButton="Click at x,y : "+std::to_string(x)+" , "+std::to_string(y);
 
         }
     }
     if (mouse_status == xplm_MouseDrag){}
 
-    if (mouse_status == xplm_MouseUp){ mouseButton="Up";}
+    if (mouse_status == xplm_MouseUp){ mouseButton="Button Up";}
 
     return 1;
 }
